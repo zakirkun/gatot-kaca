@@ -1,0 +1,13 @@
+{
+    "models": [
+        {
+            "provider": "openai",
+            "model_name": "gpt-4o",
+            "api_key": "sk-svcacct-bClcaltsEV3owFsBOb9qT3BlbkFJ0txPNVMpb1a51l6idnI8",
+            "options": {
+            "timeout": 30
+            }
+        }
+    ],
+    "default": "gpt-4o"
+}
