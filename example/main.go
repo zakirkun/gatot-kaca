@@ -9,7 +9,7 @@ import (
 	"github.com/zakirkun/gatot-kaca/config"
 	"github.com/zakirkun/gatot-kaca/integration"
 	"github.com/zakirkun/gatot-kaca/llm"
-	"github.com/zakirkun/gatot-kaca/wordflow"
+	"github.com/zakirkun/gatot-kaca/workflow"
 )
 
 func main() {
@@ -48,12 +48,12 @@ func main() {
 	fmt.Println("Direct Tool Call - Weather in London:", weatherResult)
 
 	// Workflow integration: Build a ToolNode to fetch weather for Paris.
-	weatherToolNode := &wordflow.ToolNode{
+	weatherToolNode := &workflow.ToolNode{
 		Agent:       agentInstance,
 		ToolName:    "weather",
 		Instruction: "Fetch the current weather for the following city:",
 	}
-	weatherFlow := wordflow.NewFlow([]wordflow.Node{weatherToolNode})
+	weatherFlow := workflow.NewFlow([]workflow.Node{weatherToolNode})
 	flowOutput, err := weatherFlow.Run(ctx, "Paris")
 	if err != nil {
 		log.Fatalf("Error running weather workflow: %v", err)
@@ -64,25 +64,25 @@ func main() {
 	// Balancing Node Example
 	// -------------------------------------------------------------------
 	// Create two function nodes with simple processing.
-	leftNode := &wordflow.FuncNode{
+	leftNode := &workflow.FuncNode{
 		Process: func(ctx context.Context, input string) (string, error) {
 			return "Left Node Processed: " + input, nil
 		},
 	}
-	rightNode := &wordflow.FuncNode{
+	rightNode := &workflow.FuncNode{
 		Process: func(ctx context.Context, input string) (string, error) {
 			return "Right Node Processed: " + input, nil
 		},
 	}
 	// Create a BalancingNode to distribute execution between the two function nodes.
 	// Setting weights to favor the right node (weight: 1 for left, 2 for right).
-	balancingNode := &wordflow.BalancingNode{
-		Nodes:   []wordflow.Node{leftNode, rightNode},
+	balancingNode := &workflow.BalancingNode{
+		Nodes:   []workflow.Node{leftNode, rightNode},
 		Weights: []int{1, 2},
 	}
 
 	// Build a workflow that uses the balancing node.
-	balanceFlow := wordflow.NewFlow([]wordflow.Node{balancingNode})
+	balanceFlow := workflow.NewFlow([]workflow.Node{balancingNode})
 
 	// Run the workflow multiple times to see the balancing in action.
 	fmt.Println("Balancing Node Workflow Outputs:")
@@ -98,7 +98,7 @@ func main() {
 	// Integrated Model Example with Embedded Tool Commands
 	// -------------------------------------------------------------------
 	// Retrieve an underlying LLM model (we use "gpt-4" here as an example).
-	innerModel, err := client.GetModel("gpt-4")
+	innerModel, err := client.GetModel("gpt-4o")
 	if err != nil {
 		log.Fatalf("Error retrieving model: %v", err)
 	}

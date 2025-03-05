@@ -1,3 +1,4 @@
+![logo](./images/logo.jpg)
 # Gatot Kaca
 
 Gatot Kaca is an AI Agent framework powered by Golang. It brings together multiple LLM providers, an intelligent agent with tool command processing, robust workflow orchestration, and an evaluation framework to build advanced AI applications.

@@ -1,4 +1,4 @@
-package wordflow
+package workflow
 
 import (
 	"context"
