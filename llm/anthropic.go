@@ -17,6 +17,11 @@ type AnthropicModel struct {
 	baseURL   string
 }
 
+// GenerateEmbedding implements Model.
+func (m *AnthropicModel) GenerateEmbedding(ctx context.Context, text string) ([]float64, error) {
+	panic("unimplemented")
+}
+
 // NewAnthropicModel membuat instance baru AnthropicModel
 func NewAnthropicModel(config ModelConfig) (Model, error) {
 	if config.APIKey == "" {

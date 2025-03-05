@@ -3,6 +3,7 @@ package wordflow
 import (
 	"context"
 	"fmt"
+	"time"
 )
 
 // Flow represents a sequence of workflow nodes executed in order.
@@ -42,6 +43,24 @@ func (f *Flow) RunWithLogging(ctx context.Context, initialInput string, logger f
 		}
 		if logger != nil {
 			logger(i, currentInput)
+		}
+	}
+	return currentInput, nil
+}
+
+// RunWithDetailedLogging logs the output and the execution duration of each node.
+func (f *Flow) RunWithDetailedLogging(ctx context.Context, initialInput string, logger func(step int, output string, duration time.Duration)) (string, error) {
+	currentInput := initialInput
+	var err error
+	for i, node := range f.Nodes {
+		start := time.Now()
+		currentInput, err = node.Execute(ctx, currentInput)
+		duration := time.Since(start)
+		if err != nil {
+			return "", fmt.Errorf("error at step %d: %w", i, err)
+		}
+		if logger != nil {
+			logger(i, currentInput, duration)
 		}
 	}
 	return currentInput, nil

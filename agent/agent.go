@@ -17,16 +17,26 @@ type ConversationMessage struct {
 	// (Optional) Timestamp string or any other metadata can be added here.
 }
 
+// Middleware defines an interface to pre- and post-process conversation messages.
+type Middleware interface {
+	// ProcessBeforeSend allows a middleware to modify or augment the conversation history before sending.
+	ProcessBeforeSend(ctx context.Context, history []ConversationMessage) []ConversationMessage
+	// ProcessAfterReceive allows a middleware to post-process the LLM response.
+	ProcessAfterReceive(ctx context.Context, response string) string
+}
+
 // Agent encapsulates the conversation logic with the LLM-based client
 // and now supports calling external tools.
 type Agent struct {
-	client      *llm.Client
-	modelName   string
-	history     []ConversationMessage
-	Temperature float64
-	MaxTokens   int
-	TopP        float64
-	tools       *tools.Manager
+	client       *llm.Client
+	modelName    string
+	history      []ConversationMessage
+	Temperature  float64
+	MaxTokens    int
+	TopP         float64
+	tools        *tools.Manager
+	systemPrompt string
+	middlewares  []Middleware
 }
 
 // NewAgent creates a new Agent instance and initializes its tools manager.
@@ -42,6 +52,16 @@ func NewAgent(client *llm.Client, modelName string) *Agent {
 	}
 }
 
+// SetSystemPrompt sets a system-level instruction that will be prepended to every conversation.
+func (a *Agent) SetSystemPrompt(prompt string) {
+	a.systemPrompt = prompt
+}
+
+// RegisterMiddleware registers a middleware to allow pre- and post-processing of conversation messages.
+func (a *Agent) RegisterMiddleware(m Middleware) {
+	a.middlewares = append(a.middlewares, m)
+}
+
 // AppendMessage adds a new message to the conversation history.
 func (a *Agent) AppendMessage(role, content string) {
 	a.history = append(a.history, ConversationMessage{
@@ -50,22 +70,38 @@ func (a *Agent) AppendMessage(role, content string) {
 	})
 }
 
-// BuildPrompt constructs a prompt from the entire conversation history.
-func (a *Agent) BuildPrompt() string {
+// BuildPrompt constructs a prompt from the conversation history,
+// including the system prompt (if set) and applying any registered middleware.
+func (a *Agent) BuildPrompt(ctx context.Context) string {
+	var modHistory []ConversationMessage
+	// Prepend the system prompt if present.
+	if a.systemPrompt != "" {
+		modHistory = append(modHistory, ConversationMessage{Role: "System", Content: a.systemPrompt})
+	}
+
+	// Append conversation history.
+	modHistory = append(modHistory, a.history...)
+
+	// Allow middleware to process/modify the conversation before sending.
+	for _, m := range a.middlewares {
+		modHistory = m.ProcessBeforeSend(ctx, modHistory)
+	}
+
 	var builder strings.Builder
-	for _, msg := range a.history {
+	for _, msg := range modHistory {
 		builder.WriteString(msg.Role + ": " + msg.Content + "\n")
 	}
 	return builder.String()
 }
 
-// Send sends a user message to the agent, retrieves the LLM response, and updates the conversation history.
+// Send sends a user message to the agent, retrieves the LLM response, applies middleware,
+// processes tool commands and updates the conversation history.
 func (a *Agent) Send(ctx context.Context, userInput string) (string, error) {
 	// Append the user's message.
 	a.AppendMessage("User", userInput)
 
-	// Construct the prompt.
-	prompt := a.BuildPrompt()
+	// Construct the prompt including system prompt and middleware modifications.
+	prompt := a.BuildPrompt(ctx)
 
 	// Create the model request using the agent's default parameters.
 	req := llm.ModelRequest{
@@ -81,18 +117,24 @@ func (a *Agent) Send(ctx context.Context, userInput string) (string, error) {
 		return "", err
 	}
 
-	// Append the assistant's initial response to the history.
-	a.AppendMessage("Assistant", res.Text)
-
-	// Check if the response includes an embedded tool command.
-	if toolOutput, err := a.processToolCommand(ctx, res.Text); err == nil && toolOutput != "" {
-		// Append the tool output automatically.
-		a.AppendMessage("Tool Response", toolOutput)
-		// Return the tool output concatenated with the initial response.
-		return fmt.Sprintf("%s\nTool Output: %s", res.Text, toolOutput), nil
+	// Allow middleware to post-process the LLM response.
+	responseText := res.Text
+	for _, m := range a.middlewares {
+		responseText = m.ProcessAfterReceive(ctx, responseText)
 	}
 
-	return res.Text, nil
+	// Append the assistant's response to the history.
+	a.AppendMessage("Assistant", responseText)
+
+	// Check if the response includes an embedded tool command.
+	if toolOutput, err := a.processToolCommand(ctx, responseText); err == nil && toolOutput != "" {
+		// Append the tool output automatically.
+		a.AppendMessage("Tool Response", toolOutput)
+		// Return the combined output (initial response + tool output).
+		return fmt.Sprintf("%s\nTool Output: %s", responseText, toolOutput), nil
+	}
+
+	return responseText, nil
 }
 
 // Reset clears the conversation history in the agent.

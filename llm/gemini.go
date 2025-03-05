@@ -17,6 +17,11 @@ type GeminiModel struct {
 	baseURL   string
 }
 
+// GenerateEmbedding implements Model.
+func (m *GeminiModel) GenerateEmbedding(ctx context.Context, text string) ([]float64, error) {
+	panic("unimplemented")
+}
+
 // NewGeminiModel membuat instance baru GeminiModel
 func NewGeminiModel(config ModelConfig) (Model, error) {
 	if config.APIKey == "" {

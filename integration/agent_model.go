@@ -2,7 +2,10 @@ package integration
 
 import (
 	"context"
+	"fmt"
+	"log"
 	"regexp"
+	"strings"
 
 	"github.com/zakirkun/gatot-kaca/agent"
 	"github.com/zakirkun/gatot-kaca/llm"
@@ -24,32 +27,53 @@ func NewAgentModel(agentInstance *agent.Agent, inner llm.Model) *AgentModel {
 }
 
 // Generate processes a ModelRequest by calling the inner model's Generate method.
-// After generating the initial response, it inspects the response text for tool commands.
-// If a tool command is found in the format "CALL TOOL: <tool_name> <tool_input>",
-// it uses the agent to call the tool and appends the tool's output to the response.
+// It then scans the response for one or more embedded tool commands, executes them via the Agent,
+// and replaces those commands with the tool outputs.
 func (am *AgentModel) Generate(ctx context.Context, req llm.ModelRequest) (llm.ModelResponse, error) {
-	// Get the initial response from the inner model.
+	// Generate the initial response from the inner model.
 	resp, err := am.InnerModel.Generate(ctx, req)
 	if err != nil {
+		log.Printf("[AgentModel] Error generating response: %v", err)
 		return resp, err
 	}
 
-	// Use a regex to check for an embedded tool command.
-	// Expected format: "CALL TOOL: <tool_name> <tool_input>"
-	re := regexp.MustCompile(`(?i)^CALL TOOL:\s*(\w+)\s+(.+)$`)
-	matches := re.FindStringSubmatch(resp.Text)
-	if len(matches) == 3 {
-		toolName := matches[1]
-		toolInput := matches[2]
-		// Use the agent to call the tool.
-		toolOutput, err := am.Agent.CallTool(ctx, toolName, toolInput)
-		if err == nil && toolOutput != "" {
-			// Append the tool output to the original response.
-			resp.Text += "\nTool Output: " + toolOutput
-		}
-	}
-
+	// Enhance the response by processing all embedded tool commands.
+	resp.Text = am.processToolCommands(ctx, resp.Text)
 	return resp, nil
+}
+
+// processToolCommands scans the provided text for any tool command patterns and replaces them with their outputs.
+// It supports multiple commands in a single response.
+func (am *AgentModel) processToolCommands(ctx context.Context, text string) string {
+	// Define the regex pattern for tool commands:
+	// Expected format: "CALL TOOL: <toolName> <toolInput>"
+	re := regexp.MustCompile(`(?i)CALL TOOL:\s*(\w+)\s+(.+?)(?:\n|$)`)
+
+	// Replace all matches using a function that calls the corresponding tool.
+	enhancedText := re.ReplaceAllStringFunc(text, func(match string) string {
+		submatches := re.FindStringSubmatch(match)
+		if len(submatches) < 3 {
+			// If parsing of command fails, preserve the original text.
+			return match
+		}
+		toolName := submatches[1]
+		toolInput := strings.TrimSpace(submatches[2])
+
+		log.Printf("[AgentModel] Detected tool command: '%s' with input: '%s'", toolName, toolInput)
+
+		// Invoke the tool via the agent.
+		toolOutput, err := am.Agent.CallTool(ctx, toolName, toolInput)
+		if err != nil {
+			log.Printf("[AgentModel] Failed to execute tool '%s': %v", toolName, err)
+			// If execution fails, return the original command text.
+			return match
+		}
+
+		// Format the replacement text to include the tool's output.
+		replacement := fmt.Sprintf("Tool Output (%s): %s", toolName, toolOutput)
+		return replacement
+	})
+	return enhancedText
 }
 
 // GetProvider returns the underlying model's provider.

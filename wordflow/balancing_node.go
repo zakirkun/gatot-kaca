@@ -3,6 +3,7 @@ package wordflow
 import (
 	"context"
 	"errors"
+	"log"
 	"math/rand"
 	"sync/atomic"
 	"time"
@@ -30,28 +31,42 @@ func (bn *BalancingNode) Execute(ctx context.Context, input string) (string, err
 	}
 
 	var selected Node
+
 	if len(bn.Weights) == len(bn.Nodes) {
 		// Use weighted random selection.
 		total := 0
 		for _, w := range bn.Weights {
 			total += w
 		}
-		r := rand.Intn(total)
-		for i, w := range bn.Weights {
-			if r < w {
-				selected = bn.Nodes[i]
-				break
+		if total <= 0 {
+			// If total weight is non-positive, fall back to round-robin.
+			log.Printf("BalancingNode: total weight %d is non-positive; falling back to round-robin", total)
+			idx := int(atomic.AddUint64(&bn.rrCounter, 1)-1) % len(bn.Nodes)
+			selected = bn.Nodes[idx]
+			log.Printf("BalancingNode (fallback round-robin) selected node at index %d", idx)
+		} else {
+			r := rand.Intn(total)
+			selectedIndex := -1
+			for i, w := range bn.Weights {
+				if r < w {
+					selected = bn.Nodes[i]
+					selectedIndex = i
+					break
+				}
+				r -= w
 			}
-			r -= w
-		}
-		// Fallback to the last node if none selected.
-		if selected == nil {
-			selected = bn.Nodes[len(bn.Nodes)-1]
+			// Fallback to the last node if none selected.
+			if selected == nil {
+				selected = bn.Nodes[len(bn.Nodes)-1]
+				selectedIndex = len(bn.Nodes) - 1
+			}
+			log.Printf("BalancingNode (weighted) selected node at index %d", selectedIndex)
 		}
 	} else {
 		// Use round-robin selection.
 		idx := int(atomic.AddUint64(&bn.rrCounter, 1)-1) % len(bn.Nodes)
 		selected = bn.Nodes[idx]
+		log.Printf("BalancingNode (round-robin) selected node at index %d", idx)
 	}
 
 	return selected.Execute(ctx, input)

@@ -32,8 +32,10 @@ func main() {
 
 	// Create a new agent instance (using a placeholder model name, e.g., "gpt-4").
 	agentInstance := agent.NewAgent(client, "gpt-4")
-	// Register the WeatherTool with the agent.
+
+	// Register available tools.
 	agentInstance.RegisterTool(WeatherTool{})
+	agentInstance.RegisterTool(CalculatorTool{})
 
 	// -------------------------------------------------------------------
 	// Weather Tool Example
@@ -73,7 +75,7 @@ func main() {
 		},
 	}
 	// Create a BalancingNode to distribute execution between the two function nodes.
-	// Here we set weights to favor the right node (weight: 1 for left, 2 for right).
+	// Setting weights to favor the right node (weight: 1 for left, 2 for right).
 	balancingNode := &wordflow.BalancingNode{
 		Nodes:   []wordflow.Node{leftNode, rightNode},
 		Weights: []int{1, 2},
@@ -92,8 +94,11 @@ func main() {
 		fmt.Printf("Run %d: %s\n", i+1, output)
 	}
 
-	// Obtain an underlying model from the client (for example, "gpt-4").
-	innerModel, err := client.GetModel("gpt-4o")
+	// -------------------------------------------------------------------
+	// Integrated Model Example with Embedded Tool Commands
+	// -------------------------------------------------------------------
+	// Retrieve an underlying LLM model (we use "gpt-4" here as an example).
+	innerModel, err := client.GetModel("gpt-4")
 	if err != nil {
 		log.Fatalf("Error retrieving model: %v", err)
 	}
@@ -102,8 +107,11 @@ func main() {
 	integratedModel := integration.NewAgentModel(agentInstance, innerModel)
 
 	// Now use the integrated model to generate a response.
+	// The prompt includes two embedded tool commands:
+	// 1. Calculator tool to compute 2+2
+	// 2. Weather tool to fetch current weather in New York.
 	req := llm.ModelRequest{
-		Prompt:      "Hello! CALL TOOL: calculator 2+2",
+		Prompt:      "Hello!\nCALL TOOL: calculator 2+2\nCALL TOOL: weather New York",
 		Temperature: 0.7,
 		MaxTokens:   100,
 		TopP:        0.9,
@@ -114,6 +122,6 @@ func main() {
 		log.Fatalf("Error generating response: %v", err)
 	}
 
-	fmt.Println("Final Response:")
+	fmt.Println("Final Integrated Response:")
 	fmt.Println(resp.Text)
 }

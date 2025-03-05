@@ -17,6 +17,79 @@ type OpenAIModel struct {
 	baseURL   string
 }
 
+// EmbeddingRequest represents a request payload for text embedding.
+type EmbeddingRequest struct {
+	Model string `json:"model"`
+	Input string `json:"input"`
+}
+
+// EmbeddingResponse represents the response from the OpenAI Embeddings API.
+type EmbeddingResponse struct {
+	Data []struct {
+		Embedding []float64 `json:"embedding"`
+	} `json:"data"`
+}
+
+// GenerateEmbedding implements Model.
+func (m *OpenAIModel) GenerateEmbedding(ctx context.Context, text string) ([]float64, error) {
+
+	// Prepare the request payload.
+	reqBody, err := json.Marshal(EmbeddingRequest{
+		Model: m.modelName,
+		Input: text,
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal embedding request: %w", err)
+	}
+
+	// Buat HTTP request
+	httpReq, err := http.NewRequestWithContext(
+		ctx,
+		"POST",
+		fmt.Sprintf("%s/v1/embeddings", m.baseURL),
+		strings.NewReader(string(reqBody)),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Set headers
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", m.apiKey))
+
+	// Kirim request
+	client := &http.Client{}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	// Baca response body
+	respBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	// Periksa status code
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("error dari OpenAI API: %s", string(respBody))
+	}
+
+	// Parse and return the embedding.
+	var embResp EmbeddingResponse
+	if err := json.Unmarshal(respBody, &embResp); err != nil {
+		return nil, err
+	}
+
+	if len(embResp.Data) == 0 {
+		return nil, fmt.Errorf("no embedding data returned")
+	}
+
+	return embResp.Data[0].Embedding, nil
+}
+
 // NewOpenAIModel membuat instance baru OpenAIModel
 func NewOpenAIModel(config ModelConfig) (Model, error) {
 	if config.APIKey == "" {

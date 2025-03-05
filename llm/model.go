@@ -49,6 +49,9 @@ type Model interface {
 
 	// GetModelName mengembalikan nama model
 	GetModelName() string
+
+	// Embedding
+	GenerateEmbedding(ctx context.Context, text string) ([]float64, error)
 }
 
 // ModelConfig menyimpan konfigurasi untuk model LLM

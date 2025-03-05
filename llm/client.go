@@ -60,6 +60,16 @@ func (c *Client) Generate(ctx context.Context, modelName string, req ModelReques
 	return model.Generate(ctx, req)
 }
 
+// Embedding
+func (c *Client) Embedding(ctx context.Context, modelName string, text string) ([]float64, error) {
+	model, err := c.GetModel(modelName)
+	if err != nil {
+		return nil, err
+	}
+
+	return model.GenerateEmbedding(ctx, text)
+}
+
 // ConfigureFromOptions mengonfigurasi client dari opsi
 func (c *Client) ConfigureFromOptions(options []ModelConfig) error {
 	for _, config := range options {
